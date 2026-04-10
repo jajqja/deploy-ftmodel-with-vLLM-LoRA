@@ -4,19 +4,18 @@ set -e
 # ============================================================
 # DEPLOY: HunyuanOCR + LoRA | RunPod | vLLM OpenAI-Compatible
 # Ref: https://docs.vllm.ai/en/latest/serving/openai_compatible_server/
-# Use case: OCR sổ đỏ
+# Use case: OCR
 # ============================================================
 
 # ===== CHỈNH SỬA PHẦN NÀY =====
 BASE_MODEL="tencent/HunyuanOCR"
-LORA_REPO="your-hf-username/your-lora-repo"  # HuggingFace repo LoRA của bạn
-HF_TOKEN="hf_YOUR_TOKEN_HERE"
-LORA_NAME="so-do-ocr"          # tên model khi gọi API, đặt tùy ý
+LORA_REPO="newai-vn/newai-ocr-1B"
+HF_TOKEN="hf_YOUR_TOKEN_HERE"                # Hugging Face token
+LORA_NAME="newai-ocr"                        # tên model khi gọi API, đặt tùy ý
 LORA_LOCAL="/workspace/lora_adapter"
 PORT=8000
-GPU_UTIL=0.85
-MAX_MODEL_LEN=8192              # nới rộng cho sổ đỏ (tọa độ + text dài)
-MAX_LORA_RANK=16                # khớp với r=16 trong adapter_config.json
+MAX_MODEL_LEN=8192               
+MAX_LORA_RANK=64                             # if your LoRA adapters have ranks [16, 32, 64], use --max-lora-rank 64 rather than 256
 # ================================
 
 echo "========================================================"
@@ -25,15 +24,16 @@ echo "  Base : $BASE_MODEL"
 echo "  LoRA : $LORA_REPO  →  $LORA_NAME"
 echo "========================================================"
 
-# ── 1. Cài vLLM nightly (bắt buộc cho HunyuanOCR) ──────────
+# ── 1. Cài vLLM ──
 echo ""
-echo "[1/4] Installing vLLM nightly..."
+echo "[1/4] Installing vLLM..."
 pip install uv -q
-uv pip install -U vllm --pre \
-    --extra-index-url https://wheels.vllm.ai/nightly -q
+uv venv
+source .venv/bin/activate
+uv pip install -U vllm --torch-backend auto
 echo "✓ vLLM ready"
 
-# ── 2. Cài transformers đúng commit HunyuanOCR yêu cầu ──────
+# ── 2. Cài transformers đúng commit HunyuanOCR yêu cầu ──
 echo ""
 echo "[2/4] Installing compatible transformers..."
 pip install -q \
@@ -41,7 +41,7 @@ pip install -q \
     huggingface_hub peft pillow
 echo "✓ Dependencies ready"
 
-# ── 3. Download LoRA adapter & tự động fix config ───────────
+# ── 3. Download LoRA adapter & tự động fix config ───
 echo ""
 echo "[3/4] Downloading LoRA adapter..."
 
@@ -73,7 +73,11 @@ else:
 print(f"✓ LoRA adapter ready: {local_dir}")
 PYEOF
 
-# ── 4. Jalankan vLLM server (vllm serve — cú pháp mới nhất) ─
+# Gennerate API key
+API_KEY="newwai_ocr_$(python3 -c "import secrets; print(secrets.token_hex(32))")"
+echo "API_KEY: $API_KEY"
+
+# ── 4. Jalankan vLLM server ──
 echo ""
 echo "[4/4] Starting vLLM OpenAI-compatible server..."
 echo "  POST http://0.0.0.0:${PORT}/v1/chat/completions"
@@ -82,18 +86,17 @@ echo ""
 
 # Dùng "vllm serve" theo đúng docs mới nhất
 # Ref: https://docs.vllm.ai/en/latest/serving/openai_compatible_server/
+#      https://docs.vllm.ai/projects/recipes/en/latest/Tencent-Hunyuan/HunyuanOCR.html
 vllm serve "${BASE_MODEL}" \
-    --host 0.0.0.0 \
     --port "${PORT}" \
     --enable-lora \
     --lora-modules "${LORA_NAME}=${LORA_LOCAL}" \
     --max-lora-rank "${MAX_LORA_RANK}" \
-    --max-loras 1 \
-    --gpu-memory-utilization "${GPU_UTIL}" \
     --max-model-len "${MAX_MODEL_LEN}" \
     --limit-mm-per-prompt "image=1" \
     --no-enable-prefix-caching \
     --mm-processor-cache-gb 0 \
     --dtype bfloat16 \
     --trust-remote-code \
-    --hf-token "${HF_TOKEN}"
+    --hf-token "${HF_TOKEN}"\
+    --api-key "${API_KEY}"
