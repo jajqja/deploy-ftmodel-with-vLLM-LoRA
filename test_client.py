@@ -55,10 +55,11 @@ def predict(image_path: str) -> dict:
             },
         ],
         temperature=0,
+        top_p=1,
         max_tokens=MAX_TOKENS,
         extra_body={
             "top_k": 1,
-            "repetition_penalty": 1.0
+            "repetition_penalty": 1.03
         },
     )
 
