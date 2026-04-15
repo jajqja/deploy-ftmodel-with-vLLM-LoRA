@@ -75,6 +75,7 @@ echo "================================================================"
 echo ""
 
 vllm serve "${BASE_MODEL}" \
+    --port "${PORT}" \
     --enable-lora \
     --lora-modules "${LORA_NAME}=${LORA_LOCAL}" \
     --max-lora-rank "${MAX_LORA_RANK}" \
